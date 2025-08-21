@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
-    "encoding/json"
-    "io"
-    "strings"
 
 	"github.com/alexmullins/zip"
 	"github.com/labstack/echo/v4"
@@ -46,6 +46,38 @@ func doAuth(c echo.Context) bool {
 		token = c.QueryParam("token")
 	}
 	return myDice.Parent.AccessTokens.Exists(token)
+}
+
+func extractURLsFromServersArray(blk map[string]any) []string {
+	var out []string
+	srv, ok := blk["servers"]
+	if !ok {
+		myDice.Logger.Debugf("sign block has no 'servers' field")
+		return out
+	}
+	lst, ok := srv.([]any)
+	if !ok {
+		myDice.Logger.Debugf("'servers' is not an array")
+		return out
+	}
+
+	for _, it := range lst {
+		m, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		if ig, ok := m["ignored"].(bool); ok && ig {
+			continue
+		}
+		u, _ := m["url"].(string)
+		if u == "" {
+			continue
+		}
+		u = strings.TrimSpace(u)
+		out = append(out, u)
+	}
+	out = normalizeAndUniqURLs(out)
+	return out
 }
 
 func GetHexData(c echo.Context, method string, name string) (value []byte, finished bool) {
@@ -176,6 +208,8 @@ const (
 	checkTimeout = 5 * time.Second
 )
 
+const SignTargetVersion = "30366"
+
 func checkHTTPConnectivity(url string) bool {
 	client := http.Client{
 		Timeout: checkTimeout,
@@ -223,10 +257,13 @@ func getSignProbeURLs() []string {
     defer signURLsCacheMutex.Unlock()
 
     if time.Since(signURLsCacheAt) < signURLsTTL && len(signURLsCache) > 0 {
+        myDice.Logger.Debugf("sign urls from cache, count=%d", len(signURLsCache))
         return append([]string(nil), signURLsCache...)
     }
     urls := fetchSignProbeURLsFromConn()
     urls = normalizeAndUniqURLs(urls)
+    myDice.Logger.Debugf("sign urls fetched fresh, count=%d", len(urls))
+
     if len(urls) > 0 {
         signURLsCache = urls
         signURLsCacheAt = time.Now()
@@ -236,105 +273,87 @@ func getSignProbeURLs() []string {
 }
 
 func fetchSignProbeURLsFromConn() []string {
-    info, err := dice.LagrangeGetSignInfo(myDice)
-    if err != nil || info == nil {
-        myDice.Logger.Debugf("LagrangeGetSignInfo failed: %v", err)
-        return nil
-    }
+	info, err := dice.LagrangeGetSignInfo(myDice)
+	if err != nil || info == nil {
+		myDice.Logger.Debugf("LagrangeGetSignInfo failed: %v", err)
+		return nil
+	}
 
-    var urls []string
-    switch v := any(info).(type) {
-    case map[string]any:
-        urls = extractURLsFromMap(v)
-        if len(urls) == 0 {
-            hosts := extractHostsFromMap(v)
-            for _, h := range hosts {
-                base := ensureScheme(strings.TrimRight(h, "/"))
-                urls = append(urls, base+"/api/sign/30366")
-            }
-        }
-    default:
-        b, _ := json.Marshal(info)
-        var m map[string]any
-        _ = json.Unmarshal(b, &m)
-        urls = extractURLsFromMap(m)
-        if len(urls) == 0 {
-            hosts := extractHostsFromMap(m)
-            for _, h := range hosts {
-                base := ensureScheme(strings.TrimRight(h, "/"))
-                urls = append(urls, base+"/api/sign/30366")
-            }
-        }
-    }
+	b, _ := json.Marshal(info)
 
-    return normalizeAndUniqURLs(urls)
+	var arr []map[string]any
+	if err := json.Unmarshal(b, &arr); err != nil {
+		var m map[string]any
+		if err2 := json.Unmarshal(b, &m); err2 != nil {
+			myDice.Logger.Debugf("sign info unmarshal failed: %v / %v", err, err2)
+			return nil
+		}
+		urls := extractURLsFromServersArray(m)
+		myDice.Logger.Debugf("sign info parsed (map top-level), count=%d", len(urls))
+		return urls
+	}
+
+	myDice.Logger.Debugf("sign info total blocks=%d", len(arr))
+
+	var chosen map[string]any
+	for _, blk := range arr {
+		if v, ok := blk["version"].(string); ok && v == SignTargetVersion {
+			chosen = blk
+			myDice.Logger.Debugf("sign info choose block by version=%s", SignTargetVersion)
+			break
+		}
+	}
+	if chosen == nil {
+		for _, blk := range arr {
+			if sel, ok := blk["selected"].(bool); ok && sel {
+				chosen = blk
+				myDice.Logger.Debugf("sign info choose block by selected=true")
+				break
+			}
+		}
+	}
+	if chosen == nil && len(arr) > 0 {
+		chosen = arr[len(arr)-1]
+		myDice.Logger.Debugf("sign info choose last block as fallback")
+	}
+	if chosen == nil {
+		myDice.Logger.Debugf("sign info no block chosen")
+		return nil
+	}
+
+	urls := extractURLsFromServersArray(chosen)
+	myDice.Logger.Debugf("sign servers extracted, count=%d", len(urls))
+	return urls
 }
 
 func ensureScheme(s string) string {
+    if s == "" {
+        return s
+    }
     if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
         return s
     }
     return "https://" + s
 }
 
-func extractURLsFromMap(m map[string]any) []string {
-    var urls []string
-    candidates := []string{"SignURLs", "sign_urls", "URLs", "urls", "Endpoints", "endpoints"}
-    for _, key := range candidates {
-        if v, ok := m[key]; ok {
-            if arr, ok := v.([]any); ok {
-                for _, x := range arr {
-                    if s, ok := x.(string); ok && s != "" {
-                        urls = append(urls, s)
-                    }
-                }
-            }
-        }
-    }
-    return urls
-}
-
-func extractHostsFromMap(m map[string]any) []string {
-    var hosts []string
-    for _, key := range []string{"Hosts", "hosts", "Servers", "servers"} {
-        if v, ok := m[key]; ok {
-            if arr, ok := v.([]any); ok {
-                for _, x := range arr {
-                    if s, ok := x.(string); ok && s != "" {
-                        hosts = append(hosts, s)
-                    }
-                }
-            }
-        }
-    }
-    for _, key := range []string{"BaseURL", "base_url"} {
-        if v, ok := m[key]; ok {
-            if s, ok := v.(string); ok && s != "" {
-                hosts = append(hosts, s)
-            }
-        }
-    }
-    return hosts
-}
-
 func normalizeAndUniqURLs(in []string) []string {
-    seen := make(map[string]struct{}, len(in))
-    var out []string
-    for _, u := range in {
-        u = strings.TrimSpace(u)
-        if u == "" {
-            continue
-        }
-        u = ensureScheme(u)
-        for strings.Contains(u, "///") {
-            u = strings.ReplaceAll(u, "///", "/")
-        }
-        if _, ok := seen[u]; !ok {
-            seen[u] = struct{}{}
-            out = append(out, u)
-        }
-    }
-    return out
+	seen := make(map[string]struct{}, len(in))
+	var out []string
+	for _, u := range in {
+		u = strings.TrimSpace(u)
+		if u == "" {
+			continue
+		}
+		u = ensureScheme(u)
+		for strings.Contains(u, "///") {
+			u = strings.ReplaceAll(u, "///", "/")
+		}
+		if _, ok := seen[u]; !ok {
+			seen[u] = struct{}{}
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 func checkStrictSignURL(url string, attempts int) bool {
