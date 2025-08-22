@@ -364,7 +364,7 @@ func checkStrictSignURL(url string, attempts int) bool {
         Timeout: 15 * time.Second,
     }
 
-    for i := 0; i < attempts; i++ {
+    for i := range attempts {
         resp, err := client.Get(url)
         myDice.Logger.Debugf("sign probe: %s (try %d/%d)", url, i+1, attempts)
         if err != nil {
