@@ -245,30 +245,30 @@ func checkHTTPConnectivity(url string) bool {
 }
 
 var (
-    signURLsCache      []string
-    signURLsCacheAt    time.Time
-    signURLsCacheMutex sync.Mutex
-    signURLsTTL        = 10 * time.Minute
+	signURLsCache      []string
+	signURLsCacheAt    time.Time
+	signURLsCacheMutex sync.Mutex
+	signURLsTTL        = 10 * time.Minute
 )
 
 func getSignProbeURLs() []string {
-    signURLsCacheMutex.Lock()
-    defer signURLsCacheMutex.Unlock()
+	signURLsCacheMutex.Lock()
+	defer signURLsCacheMutex.Unlock()
 
-    if time.Since(signURLsCacheAt) < signURLsTTL && len(signURLsCache) > 0 {
-        myDice.Logger.Debugf("sign urls from cache, count=%d", len(signURLsCache))
-        return append([]string(nil), signURLsCache...)
-    }
-    urls := fetchSignProbeURLsFromConn()
-    urls = normalizeAndUniqURLs(urls)
-    myDice.Logger.Debugf("sign urls fetched fresh, count=%d", len(urls))
+	if time.Since(signURLsCacheAt) < signURLsTTL && len(signURLsCache) > 0 {
+		myDice.Logger.Debugf("sign urls from cache, count=%d", len(signURLsCache))
+		return append([]string(nil), signURLsCache...)
+	}
+	urls := fetchSignProbeURLsFromConn()
+	urls = normalizeAndUniqURLs(urls)
+	myDice.Logger.Debugf("sign urls fetched fresh, count=%d", len(urls))
 
-    if len(urls) > 0 {
-        signURLsCache = urls
-        signURLsCacheAt = time.Now()
-        return append([]string(nil), urls...)
-    }
-    return nil
+	if len(urls) > 0 {
+		signURLsCache = urls
+		signURLsCacheAt = time.Now()
+		return append([]string(nil), urls...)
+	}
+	return nil
 }
 
 func fetchSignProbeURLsFromConn() []string {
@@ -326,13 +326,13 @@ func fetchSignProbeURLsFromConn() []string {
 }
 
 func ensureScheme(s string) string {
-    if s == "" {
-        return s
-    }
-    if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
-        return s
-    }
-    return "https://" + s
+	if s == "" {
+		return s
+	}
+	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
+		return s
+	}
+	return "https://" + s
 }
 
 func normalizeAndUniqURLs(in []string) []string {
@@ -356,94 +356,94 @@ func normalizeAndUniqURLs(in []string) []string {
 }
 
 func checkStrictSignURL(url string, attempts int) bool {
-    if attempts <= 0 {
-        attempts = 1
-    }
-    client := http.Client{
-        Timeout: 15 * time.Second,
-    }
+	if attempts <= 0 {
+		attempts = 1
+	}
+	client := http.Client{
+		Timeout: 15 * time.Second,
+	}
 
-    for i := range attempts {
-        resp, err := client.Get(url)
-        myDice.Logger.Debugf("sign probe: %s (try %d/%d)", url, i+1, attempts)
-        if err != nil {
-            myDice.Logger.Debugf("sign probe error: %v", err)
-            return false
-        }
+	for i := range attempts {
+		resp, err := client.Get(url)
+		myDice.Logger.Debugf("sign probe: %s (try %d/%d)", url, i+1, attempts)
+		if err != nil {
+			myDice.Logger.Debugf("sign probe error: %v", err)
+			return false
+		}
 
-        n, _ := io.CopyN(io.Discard, resp.Body, 1)
-        _ = resp.Body.Close()
+		n, _ := io.CopyN(io.Discard, resp.Body, 1)
+		_ = resp.Body.Close()
 
-        if resp.StatusCode != http.StatusOK {
-            myDice.Logger.Debugf("sign probe bad status: %d", resp.StatusCode)
-            return false
-        }
+		if resp.StatusCode != http.StatusOK {
+			myDice.Logger.Debugf("sign probe bad status: %d", resp.StatusCode)
+			return false
+		}
 
-        if n == 0 {
-            myDice.Logger.Debugf("sign probe empty body")
-            return false
-        }
+		if n == 0 {
+			myDice.Logger.Debugf("sign probe empty body")
+			return false
+		}
 
-        if strings.HasPrefix(url, "https://") {
-            if resp.TLS == nil || len(resp.TLS.VerifiedChains) == 0 {
-                myDice.Logger.Debugf("sign probe tls not verified")
-                return false
-            }
-        }
-    }
-    return true
+		if strings.HasPrefix(url, "https://") {
+			if resp.TLS == nil || len(resp.TLS.VerifiedChains) == 0 {
+				myDice.Logger.Debugf("sign probe tls not verified")
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func checkNetworkHealth(c echo.Context) error {
-    total := 5 // baidu, seal, sign, google, github
-    var ok []string
-    var wg sync.WaitGroup
-    wg.Add(total)
-    rsChan := make(chan string, total)
+	total := 5 // baidu, seal, sign, google, github
+	var ok []string
+	var wg sync.WaitGroup
+	wg.Add(total)
+	rsChan := make(chan string, total)
 
-    checkUrls := func(target string, urls []string) {
-        defer wg.Done()
-        for _, url := range urls {
-            if checkHTTPConnectivity(url) {
-                rsChan <- target
-                break
-            }
-        }
-    }
-    go checkUrls("baidu", []string{"https://baidu.com"})
-    go checkUrls("seal", dice.BackendUrls)
+	checkUrls := func(target string, urls []string) {
+		defer wg.Done()
+		for _, url := range urls {
+			if checkHTTPConnectivity(url) {
+				rsChan <- target
+				break
+			}
+		}
+	}
+	go checkUrls("baidu", []string{"https://baidu.com"})
+	go checkUrls("seal", dice.BackendUrls)
 	go func() {
-	    defer wg.Done()
-	    urls := getSignProbeURLs()
-	    if len(urls) == 0 {
-	        // 没有下发任何签名地址，直接视为失败（不写 rsChan）
-	        myDice.Logger.Debugf("no sign endpoints were delivered")
-	        return
-	    }
-	    // 逐个地址探测：只要某个地址“连续 checkTimes 次严格成功”，就算 sign 可用
-	    for _, u := range urls {
-	        if checkStrictSignURL(u, checkTimes) { // ✅ 沿用老逻辑的次数（checkTimes）
-	            rsChan <- "sign"
-	            return
-	        }
-	    }
-	    // 全部地址都没达到“连续 checkTimes 次成功”，不写入 rsChan（前端就看不到 sign）
+		defer wg.Done()
+		urls := getSignProbeURLs()
+		if len(urls) == 0 {
+			// 没有下发任何签名地址，直接视为失败（不写 rsChan）
+			myDice.Logger.Debugf("no sign endpoints were delivered")
+			return
+		}
+		// 逐个地址探测：只要某个地址“连续 checkTimes 次严格成功”，就算 sign 可用
+		for _, u := range urls {
+			if checkStrictSignURL(u, checkTimes) { // ✅ 沿用老逻辑的次数（checkTimes）
+				rsChan <- "sign"
+				return
+			}
+		}
+		// 全部地址都没达到“连续 checkTimes 次成功”，不写入 rsChan（前端就看不到 sign）
 	}()
-    go checkUrls("google", []string{"https://google.com"})
-    go checkUrls("github", []string{"https://github.com"})
+	go checkUrls("google", []string{"https://google.com"})
+	go checkUrls("github", []string{"https://github.com"})
 
-    go func() {
-        wg.Wait()
-        close(rsChan)
-    }()
+	go func() {
+		wg.Wait()
+		close(rsChan)
+	}()
 
-    for targetOk := range rsChan {
-        ok = append(ok, targetOk)
-    }
+	for targetOk := range rsChan {
+		ok = append(ok, targetOk)
+	}
 
-    return Success(&c, Response{
-        "total":     total,
-        "ok":        ok,
-        "timestamp": time.Now().Unix(),
-    })
+	return Success(&c, Response{
+		"total":     total,
+		"ok":        ok,
+		"timestamp": time.Now().Unix(),
+	})
 }
