@@ -123,7 +123,6 @@ func getGithubAvatar(c echo.Context) error {
 
 	resp := req.Send()
 	if resp.OK() {
-		// 设置缓存时间为3天
 		c.Response().Header().Set("Cache-Control", "max-age=259200")
 
 		return c.Blob(http.StatusOK, resp.ContentType(), resp.Bytes())
