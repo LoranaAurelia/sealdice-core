@@ -10,10 +10,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"strconv"
 
 	"github.com/alexmullins/zip"
 	"github.com/labstack/echo/v4"
@@ -290,20 +290,20 @@ func fetchSignProbeURLsFromConn() []string {
 		}
 	}
 	if chosen == nil {
-	    maxIdx, maxVer := -1, -1
-	    for i := range blocks {
-	        if v := versionInt(blocks[i].Version); v > maxVer {
-	            maxVer, maxIdx = v, i
-	        }
-	    }
-	    if maxIdx >= 0 {
-	        chosen = &blocks[maxIdx]
-	        myDice.Logger.Debugf("sign info choose block by max version=%s", blocks[maxIdx].Version)
-	    }
+		maxIdx, maxVer := -1, -1
+		for i := range blocks {
+			if v := versionInt(blocks[i].Version); v > maxVer {
+				maxVer, maxIdx = v, i
+			}
+		}
+		if maxIdx >= 0 {
+			chosen = &blocks[maxIdx]
+			myDice.Logger.Debugf("sign info choose block by max version=%s", blocks[maxIdx].Version)
+		}
 	}
 	if chosen == nil {
-	    chosen = &blocks[len(blocks)-1]
-	    myDice.Logger.Debugf("sign info choose last block as fallback")
+		chosen = &blocks[len(blocks)-1]
+		myDice.Logger.Debugf("sign info choose last block as fallback")
 	}
 
 	var urls []string
