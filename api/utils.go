@@ -364,10 +364,10 @@ func anySignOK(urls []string, attempts, maxParallel int) bool {
 			ok := checkStrictSignURL(u, attempts)
 			<-sem
 			if ok {
-			    select {
-			    case found <- struct{}{}:
-			    default:
-			    }
+				select {
+				case found <- struct{}{}:
+				default:
+				}
 			}
 		}()
 	}
