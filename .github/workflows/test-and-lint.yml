@@ -15,7 +15,7 @@ on:
 jobs:
   test-and-lint:
     name: Test & Lint
-    runs-on: ubuntu-latest
+    runs-on: lorana-toolbox
     steps:
       - name: Code
         uses: actions/checkout@v4
