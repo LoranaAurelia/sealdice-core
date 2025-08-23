@@ -12,7 +12,7 @@ jobs:
   format:
     # 避免对带 [skip ci] 的提交再次触发
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
-    runs-on: ubuntu-latest
+    runs-on: lorana-toolbox
     permissions:
       contents: write   # 允许自动提交回分支
 
