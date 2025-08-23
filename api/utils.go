@@ -262,16 +262,11 @@ func fetchSignProbeURLsFromConn() []string {
 		return nil
 	}
 
-	var data []byte
-	switch v := raw.(type) {
-	case []byte:
-		data = v
-	case string:
-		data = []byte(v)
-	default:
-		data, _ = json.Marshal(v)
+	data, err := json.Marshal(raw)
+	if err != nil {
+	    myDice.Logger.Debugf("sign info marshal failed: %v", err)
+	    return nil
 	}
-
 	var blocks []signBlock
 	if err := json.Unmarshal(data, &blocks); err != nil || len(blocks) == 0 {
 		myDice.Logger.Debugf("sign info unmarshal error or empty: %v", err)
