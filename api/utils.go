@@ -264,8 +264,8 @@ func fetchSignProbeURLsFromConn() []string {
 
 	data, err := json.Marshal(raw)
 	if err != nil {
-	    myDice.Logger.Debugf("sign info marshal failed: %v", err)
-	    return nil
+		myDice.Logger.Debugf("sign info marshal failed: %v", err)
+		return nil
 	}
 	var blocks []signBlock
 	if err := json.Unmarshal(data, &blocks); err != nil || len(blocks) == 0 {
