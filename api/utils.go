@@ -351,16 +351,19 @@ func anySignOK(urls []string, attempts, maxParallel int) bool {
 	var wg sync.WaitGroup
 
 	for _, u := range urls {
-	    wg.Add(1)
-	    go func(u string) {
-	        defer wg.Done()
-	        sem <- struct{}{}
-	        ok := checkStrictSignURL(u, attempts)
-	        <-sem
-	        if ok {
-	            select { case found <- struct{}{}: default: }
-	        }
-	    }(u)
+		wg.Add(1)
+		go func(u string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			ok := checkStrictSignURL(u, attempts)
+			<-sem
+			if ok {
+				select {
+				case found <- struct{}{}:
+				default:
+				}
+			}
+		}(u)
 	}
 
 	done := make(chan struct{})
