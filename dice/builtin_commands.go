@@ -1247,7 +1247,6 @@ func (d *Dice) registerCoreCommands() {
 					d.Logger.Infof("roll reseed: %d", seed)
 				}
 				// =======================================
-
 				forWhat := ""
 				var matched string
 
