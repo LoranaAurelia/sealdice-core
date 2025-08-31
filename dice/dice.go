@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+	
+	crand "crypto/rand"
 
 	"github.com/dop251/goja_nodejs/eventloop"
 	"github.com/dop251/goja_nodejs/require"
@@ -747,30 +749,72 @@ func (d *Dice) GameSystemTemplateAdd(tmpl *GameSystemTemplate) bool {
 }
 
 // generateRandSeed 生成一个随机种子，由当前时间戳、对象指针、进程ID和堆栈信息组成
+// generateRandSeed 生成一个随机种子：优先使用内核随机，
+// 并混入多种环境差异；若失败，则记录日志并回退到旧实现。
 func generateRandSeed() uint64 {
-	timestamp := time.Now().UnixNano()
+	// 1) 尝试从内核随机源读取 16 字节
+	var kr [16]byte
+	if _, err := crand.Read(kr[:]); err == nil {
+		h := fnv.New64a()
 
-	type tempObj struct{ val int }
-	obj := tempObj{val: 42}
-	objPtr := uint64(uintptr(unsafe.Pointer(&obj)))
+		// 内核随机
+		_, _ = h.Write(kr[:])
 
-	pid := uint64(os.Getpid())
+		// 时间戳（纳秒）
+		ts := time.Now().UnixNano()
+		_ = binary.Write(h, binary.LittleEndian, ts)
 
-	buf := make([]byte, 1024)
-	n := runtime.Stack(buf, true)
-	stackInfo := buf[:n]
+		// 进程 ID
+		pid := uint64(os.Getpid())
+		_ = binary.Write(h, binary.LittleEndian, pid)
 
-	h := fnv.New64a()
+		// 指针抖动（地址随机性）
+		obj := struct{ v int }{v: 42}
+		ptr := uint64(uintptr(unsafe.Pointer(&obj)))
+		_ = binary.Write(h, binary.LittleEndian, ptr)
 
-	_ = binary.Write(h, binary.LittleEndian, timestamp)
+		// 主机名（KVM/VPS/容器常不同）
+		if hn, err := os.Hostname(); err == nil {
+			_, _ = h.Write([]byte(hn))
+		}
 
-	_ = binary.Write(h, binary.LittleEndian, objPtr)
+		// machine-id（Linux 常见，容器/云主机差异显著）
+		if b, err := os.ReadFile("/etc/machine-id"); err == nil {
+			_, _ = h.Write([]byte(strings.TrimSpace(string(b))))
+		} else if b, err := os.ReadFile("/var/lib/dbus/machine-id"); err == nil {
+			_, _ = h.Write([]byte(strings.TrimSpace(string(b))))
+		}
 
-	_ = binary.Write(h, binary.LittleEndian, pid)
+		// cgroup 信息（容器/KVM 环境差异化很有用）
+		if b, err := os.ReadFile("/proc/self/cgroup"); err == nil {
+			_, _ = h.Write(b)
+		}
 
-	_, _ = h.Write(stackInfo)
+		return h.Sum64()
+	} else {
+		// 2) 失败则日志并回退到旧逻辑
+		logger.M().Warnf("generateRandSeed: crypto/rand failed, fallback to legacy seed: %v", err)
 
-	return h.Sum64()
+		timestamp := time.Now().UnixNano()
+
+		type tempObj struct{ val int }
+		obj := tempObj{val: 42}
+		objPtr := uint64(uintptr(unsafe.Pointer(&obj)))
+
+		pid := uint64(os.Getpid())
+
+		buf := make([]byte, 1024)
+		n := runtime.Stack(buf, true)
+		stackInfo := buf[:n]
+
+		h := fnv.New64a()
+		_ = binary.Write(h, binary.LittleEndian, timestamp)
+		_ = binary.Write(h, binary.LittleEndian, objPtr)
+		_ = binary.Write(h, binary.LittleEndian, pid)
+		_, _ = h.Write(stackInfo)
+
+		return h.Sum64()
+	}
 }
 
 var randSource = rand2.NewSource(generateRandSeed()).(*rand2.PCGSource)
