@@ -6,7 +6,7 @@ on:
 
 jobs:
   cleanup:
-    runs-on: lorana-toolbox
+    runs-on: ubuntu-latest
     steps:
       - name: Cleanup
         run: |
