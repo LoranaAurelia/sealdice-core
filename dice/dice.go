@@ -755,96 +755,64 @@ func (d *Dice) GameSystemTemplateAdd(tmpl *GameSystemTemplate) bool {
 // generateRandSeed 生成一个随机种子：优先使用内核随机，
 // 并混入多种环境差异；若失败，则记录日志并回退到旧实现。
 // 日志级别：Info（步骤与最终种子）、Warn（回退提示）。
+// generateRandSeed 生成一个随机种子：优先使用内核随机，
+// 并混入多种环境差异；若失败，则记录日志并回退到旧实现。
 func generateRandSeed() uint64 {
-	logger.M().Info("generateRandSeed: begin")
-
 	// 1) 尝试从内核随机源读取 16 字节
 	var kr [16]byte
-	if _, errRead := crand.Read(kr[:]); errRead == nil {
+	if _, err := crand.Read(kr[:]); err == nil {
 		h := fnv.New64a()
 
 		// 内核随机
 		_, _ = h.Write(kr[:])
-		logger.M().Infof("generateRandSeed: crypto/rand ok: %x", kr)
 
 		// 时间戳（纳秒）
 		ts := time.Now().UnixNano()
 		_ = binary.Write(h, binary.LittleEndian, ts)
-		logger.M().Infof("generateRandSeed: timestamp_ns=%d", ts)
 
 		// 进程 ID
 		pid := uint64(os.Getpid())
 		_ = binary.Write(h, binary.LittleEndian, pid)
-		logger.M().Infof("generateRandSeed: pid=%d", pid)
 
 		// 指针抖动（地址随机性）
 		obj := struct{ v int }{v: 42}
 		ptr := uint64(uintptr(unsafe.Pointer(&obj)))
 		_ = binary.Write(h, binary.LittleEndian, ptr)
-		logger.M().Infof("generateRandSeed: obj_ptr=0x%016x", ptr)
 
 		// 主机名（KVM/VPS/容器常不同）
 		if hn, errHost := os.Hostname(); errHost == nil {
 			_, _ = h.Write([]byte(hn))
-			logger.M().Infof("generateRandSeed: hostname=%q", hn)
-		} else {
-			logger.M().Infof("generateRandSeed: hostname error: %v", errHost)
 		}
 
 		// machine-id（Linux 常见，容器/云主机差异显著）
-		if bMid, errMid := os.ReadFile("/etc/machine-id"); errMid == nil {
-			mid := strings.TrimSpace(string(bMid))
-			_, _ = h.Write([]byte(mid))
-			logger.M().Infof("generateRandSeed: machine-id(/etc/machine-id)=%q", mid)
-		} else if bDbus, errDbus := os.ReadFile("/var/lib/dbus/machine-id"); errDbus == nil {
-			mid := strings.TrimSpace(string(bDbus))
-			_, _ = h.Write([]byte(mid))
-			logger.M().Infof("generateRandSeed: machine-id(/var/lib/dbus/machine-id)=%q", mid)
-		} else {
-			logger.M().Info("generateRandSeed: machine-id not found")
+		if b, errMid := os.ReadFile("/etc/machine-id"); errMid == nil {
+			_, _ = h.Write([]byte(strings.TrimSpace(string(b))))
+		} else if b2, errMid2 := os.ReadFile("/var/lib/dbus/machine-id"); errMid2 == nil {
+			_, _ = h.Write([]byte(strings.TrimSpace(string(b2))))
 		}
 
-		// cgroup 信息（记录长度+样例，避免日志过长）
-		if bCg, errCg := os.ReadFile("/proc/self/cgroup"); errCg == nil {
-			_, _ = h.Write(bCg)
-			sample := string(bCg)
-			if len(sample) > 120 {
-				sample = sample[:120] + "..."
-			}
-			sample = strings.ReplaceAll(sample, "\n", "\\n")
-			logger.M().Infof("generateRandSeed: cgroup len=%d sample=%q", len(bCg), sample)
-		} else {
-			logger.M().Infof("generateRandSeed: cgroup read error: %v", errCg)
+		// cgroup 信息（容器/KVM 环境差异化很有用）
+		if b3, errCg := os.ReadFile("/proc/self/cgroup"); errCg == nil {
+			_, _ = h.Write(b3)
 		}
 
-		seed := h.Sum64()
-		logger.M().Infof("generateRandSeed: final seed=0x%016x", seed)
-		return seed
+		return h.Sum64()
 	}
 
 	// 2) 失败则日志并回退到旧逻辑
 	logger.M().Warnf("generateRandSeed: crypto/rand failed, fallback to legacy seed")
 
 	timestamp := time.Now().UnixNano()
-	logger.M().Infof("generateRandSeed(fallback): timestamp_ns=%d", timestamp)
 
 	type tempObj struct{ val int }
 	obj := tempObj{val: 42}
 	objPtr := uint64(uintptr(unsafe.Pointer(&obj)))
-	logger.M().Infof("generateRandSeed(fallback): obj_ptr=0x%016x", objPtr)
 
 	pid := uint64(os.Getpid())
-	logger.M().Infof("generateRandSeed(fallback): pid=%d", pid)
 
 	buf := make([]byte, 1024)
 	n := runtime.Stack(buf, true)
 	stackInfo := buf[:n]
-	stackSample := string(stackInfo)
-	if len(stackSample) > 120 {
-		stackSample = stackSample[:120] + "..."
-	}
-	stackSample = strings.ReplaceAll(stackSample, "\n", "\\n")
-	logger.M().Infof("generateRandSeed(fallback): stack len=%d sample=%q", len(stackInfo), stackSample)
 
 	h := fnv.New64a()
 	_ = binary.Write(h, binary.LittleEndian, timestamp)
@@ -852,9 +820,7 @@ func generateRandSeed() uint64 {
 	_ = binary.Write(h, binary.LittleEndian, pid)
 	_, _ = h.Write(stackInfo)
 
-	seed := h.Sum64()
-	logger.M().Infof("generateRandSeed(fallback): final seed=0x%016x", seed)
-	return seed
+	return h.Sum64()
 }
 
 var randSource = rand2.NewSource(generateRandSeed()).(*rand2.PCGSource)
