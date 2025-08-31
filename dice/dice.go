@@ -786,7 +786,7 @@ func generateRandSeed() uint64 {
 			_, _ = h.Write([]byte(strings.TrimSpace(string(b2))))
 		}
 
-		// cgroup 信息（容器/KVM 环境差异化很有用）
+		// cgroup 信息（容器/KVM环境差异化很有用）
 		if b3, errCg := os.ReadFile("/proc/self/cgroup"); errCg == nil {
 			_, _ = h.Write(b3)
 		}
