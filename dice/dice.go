@@ -710,7 +710,7 @@ func (d *Dice) ApplyAliveNotice() {
 	}
 	if d.Config.AliveNoticeEnable {
 		entry, err := d.Cron.AddFunc((&d.Config).AliveNoticeValue, func() {
-			d.NoticeForEveryEndpoint(fmt.Sprintf("存活, D100=%d", DiceRoll64(100)), false)
+			d.NoticeForEveryEndpoint(fmt.Sprintf("呀哈！咱活蹦乱跳的呢！终端刚刚摇出来的幸运数字是 D100=%d，要记得带在身上哦！D100=%d", DiceRoll64(100)), false)
 		})
 		if err == nil {
 			d.AliveNoticeEntry = entry
