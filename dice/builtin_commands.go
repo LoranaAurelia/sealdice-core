@@ -1240,13 +1240,6 @@ func (d *Dice) registerCoreCommands() {
 			var commandInfoItems []any
 
 			rollOne := func() *CmdExecuteResult {
-				// === 新增：为本次骰点重置随机种子并打印 ===
-				if randSource != nil {
-					seed := generateRandSeed()
-					randSource.Seed(seed)
-					d.Logger.Infof("roll reseed: 0x%016x", seed)
-				}
-				// =======================================
 				forWhat := ""
 				var matched string
 
@@ -1270,6 +1263,7 @@ func (d *Dice) registerCoreCommands() {
 							DisableBlock:       true,
 						})
 					}
+
 					if r != nil && r.TypeId == ds.VMTypeInt {
 						diceResult = int64(r.MustReadInt())
 						diceResultExists = true
