@@ -751,6 +751,7 @@ func (d *Dice) GameSystemTemplateAdd(tmpl *GameSystemTemplate) bool {
 // generateRandSeed 生成一个随机种子，由当前时间戳、对象指针、进程ID和堆栈信息组成
 // generateRandSeed 生成一个随机种子：优先使用内核随机，
 // 并混入多种环境差异；若失败，则记录日志并回退到旧实现。
+
 func generateRandSeed() uint64 {
 	// 1) 尝试从内核随机源读取 16 字节
 	var kr [16]byte
