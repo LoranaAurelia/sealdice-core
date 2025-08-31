@@ -1244,7 +1244,7 @@ func (d *Dice) registerCoreCommands() {
 				if randSource != nil {
 					seed := generateRandSeed()
 					randSource.Seed(seed)
-					d.Logger.Infof("roll reseed: %d", seed)
+					d.Logger.Infof("roll reseed: 0x%016x", seed)
 				}
 				// =======================================
 				forWhat := ""
