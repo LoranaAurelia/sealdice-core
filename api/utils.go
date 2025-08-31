@@ -10,12 +10,11 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	
 
-	"github.com/samber/lo"
 	"github.com/alexmullins/zip"
 	"github.com/labstack/echo/v4"
 	"github.com/monaco-io/request"
+	"github.com/samber/lo"
 
 	"sealdice-core/dice"
 )
@@ -230,10 +229,10 @@ func checkNetworkHealth(c echo.Context) error {
 	go checkUrls("seal", dice.BackendUrls)
 	signUrls, err := dice.LagrangeGetSignInfo(myDice)
 	if err == nil && len(signUrls) > 0 {
-	    urls := lo.Map(signUrls[len(signUrls)-1].Servers, func(signServerInfo *dice.SignServerInfo, _ int) string {
-	        return fmt.Sprintf("%s/ping", signServerInfo.Url)
-	    })
-	    go checkUrls("sign", urls)
+		urls := lo.Map(signUrls[len(signUrls)-1].Servers, func(signServerInfo *dice.SignServerInfo, _ int) string {
+			return fmt.Sprintf("%s/ping", signServerInfo.Url)
+		})
+		go checkUrls("sign", urls)
 	}
 	go checkUrls("google", []string{"https://google.com"})
 	go checkUrls("github", []string{"https://github.com"})

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 	"unsafe"
-	
+
 	crand "crypto/rand"
 
 	"github.com/dop251/goja_nodejs/eventloop"
