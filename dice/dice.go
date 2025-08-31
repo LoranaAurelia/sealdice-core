@@ -775,47 +775,47 @@ func generateRandSeed() uint64 {
 		_ = binary.Write(h, binary.LittleEndian, ptr)
 
 		// 主机名（KVM/VPS/容器常不同）
-		if hn, err := os.Hostname(); err == nil {
+		if hn, errHost := os.Hostname(); errHost == nil {
 			_, _ = h.Write([]byte(hn))
 		}
 
 		// machine-id（Linux 常见，容器/云主机差异显著）
-		if b, err := os.ReadFile("/etc/machine-id"); err == nil {
+		if b, errMid := os.ReadFile("/etc/machine-id"); errMid == nil {
 			_, _ = h.Write([]byte(strings.TrimSpace(string(b))))
-		} else if b, err := os.ReadFile("/var/lib/dbus/machine-id"); err == nil {
-			_, _ = h.Write([]byte(strings.TrimSpace(string(b))))
+		} else if b2, errMid2 := os.ReadFile("/var/lib/dbus/machine-id"); errMid2 == nil {
+			_, _ = h.Write([]byte(strings.TrimSpace(string(b2))))
 		}
 
 		// cgroup 信息（容器/KVM 环境差异化很有用）
-		if b, err := os.ReadFile("/proc/self/cgroup"); err == nil {
-			_, _ = h.Write(b)
+		if b3, errCg := os.ReadFile("/proc/self/cgroup"); errCg == nil {
+			_, _ = h.Write(b3)
 		}
 
 		return h.Sum64()
-	} else {
-		// 2) 失败则日志并回退到旧逻辑
-		logger.M().Warnf("generateRandSeed: crypto/rand failed, fallback to legacy seed: %v", err)
-
-		timestamp := time.Now().UnixNano()
-
-		type tempObj struct{ val int }
-		obj := tempObj{val: 42}
-		objPtr := uint64(uintptr(unsafe.Pointer(&obj)))
-
-		pid := uint64(os.Getpid())
-
-		buf := make([]byte, 1024)
-		n := runtime.Stack(buf, true)
-		stackInfo := buf[:n]
-
-		h := fnv.New64a()
-		_ = binary.Write(h, binary.LittleEndian, timestamp)
-		_ = binary.Write(h, binary.LittleEndian, objPtr)
-		_ = binary.Write(h, binary.LittleEndian, pid)
-		_, _ = h.Write(stackInfo)
-
-		return h.Sum64()
 	}
+
+	// 2) 失败则日志并回退到旧逻辑
+	logger.M().Warnf("generateRandSeed: crypto/rand failed, fallback to legacy seed")
+
+	timestamp := time.Now().UnixNano()
+
+	type tempObj struct{ val int }
+	obj := tempObj{val: 42}
+	objPtr := uint64(uintptr(unsafe.Pointer(&obj)))
+
+	pid := uint64(os.Getpid())
+
+	buf := make([]byte, 1024)
+	n := runtime.Stack(buf, true)
+	stackInfo := buf[:n]
+
+	h := fnv.New64a()
+	_ = binary.Write(h, binary.LittleEndian, timestamp)
+	_ = binary.Write(h, binary.LittleEndian, objPtr)
+	_ = binary.Write(h, binary.LittleEndian, pid)
+	_, _ = h.Write(stackInfo)
+
+	return h.Sum64()
 }
 
 var randSource = rand2.NewSource(generateRandSeed()).(*rand2.PCGSource)
